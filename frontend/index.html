@@ -78,7 +78,6 @@
 <body>
 
     <div class="dashboard">
-        <!-- New Navigation Link -->
         <a href="analytics.html" style="color: #94a3b8; text-decoration: none; font-size: 0.9em; display: inline-block; margin-bottom: 15px; transition: color 0.2s;" onmouseover="this.style.color='#f8fafc'" onmouseout="this.style.color='#94a3b8'">📊 View Global Analytics →</a>
         
         <h2>AI Sentiment Analytics</h2>
@@ -88,7 +87,6 @@
             <button id="analyzeBtn" onclick="analyzeText()">Analyze Sentiment ✨</button>
         </div>
 
-        <!-- Dynamic Results Area -->
         <div id="results-container">
             <div class="main-sentiment" id="sentimentText"></div>
             
@@ -100,24 +98,39 @@
                     <canvas id="barChart"></canvas>
                 </div>
             </div>
+            
+            <!-- Deep Linguistic Analysis Table -->
+            <div id="linguistics-container" style="margin-top: 30px; display: none; animation: fadeIn 0.8s ease-out;">
+                <h3 style="text-align: center; color: #fff; font-size: 1.2em;">Lexical & Morphological Breakdown</h3>
+                <div style="overflow-x: auto; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1);">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.9em;">
+                        <thead>
+                            <tr style="background: rgba(0,0,0,0.3); color: #94a3b8;">
+                                <th style="padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.1);">Token (Word)</th>
+                                <th style="padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.1);">Lexical (POS)</th>
+                                <th style="padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.1);">Root (Lemma)</th>
+                                <th style="padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.1);">Morphology</th>
+                            </tr>
+                        </thead>
+                        <tbody id="linguisticsBody">
+                            <!-- Data populates here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
-        <!-- History Section -->
         <div id="history-container" style="margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); display: none;">
             <h3 style="text-align: left; margin-bottom: 15px; color: #94a3b8;">Recent Analyses</h3>
-            <ul id="historyList" style="list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto;">
-                <!-- History items will appear here -->
-            </ul>
+            <ul id="historyList" style="list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto;"></ul>
             <button onclick="clearHistory()" style="margin-top: 15px; background: transparent; border: 1px solid #ef4444; color: #ef4444; padding: 8px 15px; font-size: 14px; cursor: pointer; transition: 0.3s;">Clear History</button>
         </div>
     </div>
 
     <script>
-        // Store chart instances
         let myPieChart = null;
         let myBarChart = null;
 
-        // Load history when page opens
         window.onload = loadHistory;
 
         async function analyzeText() {
@@ -127,12 +140,10 @@
             
             if(!text.trim()) { alert("Please enter some text!"); return; }
 
-            // Loading state
             btn.innerText = "Analyzing... ⏳";
             btn.style.opacity = "0.7";
 
             try {
-                // Your live Render URL
                 const backendUrl = 'https://nlp-backend-xsoy.onrender.com/analyze'; 
                 
                 const response = await fetch(backendUrl, {
@@ -143,14 +154,32 @@
                 
                 const data = await response.json();
                 
-                // Update UI
                 document.getElementById('sentimentText').innerHTML = `Overall Tone: <strong>${data.sentiment}</strong>`;
                 resultsDiv.style.display = 'block';
                 
-                // Draw charts
                 renderCharts(data.scores);
                 
-                // Save to History
+                // Render Linguistic Table
+                const lingContainer = document.getElementById('linguistics-container');
+                const lingBody = document.getElementById('linguisticsBody');
+                lingBody.innerHTML = ''; 
+                
+                if (data.linguistics && data.linguistics.length > 0) {
+                    data.linguistics.forEach(item => {
+                        lingBody.innerHTML += `
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(255,255,255,0.02);">
+                                <td style="padding: 10px; color: #c7d2fe; font-weight: bold;">${item.word}</td>
+                                <td style="padding: 10px; color: #22c55e;">${item.pos}</td>
+                                <td style="padding: 10px; color: #f8fafc;">${item.lemma}</td>
+                                <td style="padding: 10px; color: #94a3b8; font-size: 0.85em;">${item.morph || "N/A"}</td>
+                            </tr>
+                        `;
+                    });
+                    lingContainer.style.display = 'block';
+                } else {
+                    lingContainer.style.display = 'none';
+                }
+                
                 saveToHistory(text, data.sentiment);
 
             } catch (error) {

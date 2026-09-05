@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Sentiment Analyzer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --text: #f8fafc;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .dashboard {
+            background: var(--card-bg);
+            width: 100%;
+            max-width: 800px;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        h2 { text-align: center; margin-top: 0; font-size: 2em; background: -webkit-linear-gradient(#a855f7, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+        .input-group { display: flex; flex-direction: column; gap: 15px; margin-bottom: 30px; }
+
+        textarea {
+            width: 100%; box-sizing: border-box; height: 120px; padding: 15px;
+            background: rgba(255, 255, 255, 0.05); color: white;
+            border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px;
+            font-size: 16px; resize: none; outline: none; transition: 0.3s;
+        }
+        textarea:focus { border-color: var(--primary); box-shadow: 0 0 15px rgba(99, 102, 241, 0.3); }
+
+        button {
+            padding: 15px; background: var(--primary); color: white;
+            border: none; border-radius: 10px; font-size: 18px; font-weight: bold;
+            cursor: pointer; transition: 0.3s;
+        }
+        button:hover { background: var(--primary-hover); transform: translateY(-2px); box-shadow: 0 10px 20px rgba(99, 102, 241, 0.4); }
+
+        #results-container { display: none; animation: fadeIn 0.8s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+        .main-sentiment {
+            text-align: center; font-size: 2em; margin: 20px 0; padding: 20px;
+            background: rgba(255,255,255,0.03); border-radius: 15px;
+        }
+
+        .charts-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 30px;
+        }
+
+        .chart-box {
+            background: rgba(0,0,0,0.2); padding: 20px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        @media (max-width: 600px) { .charts-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard">
+        <h2>AI Sentiment Analytics</h2>
+        
+        <div class="input-group">
+            <textarea id="textInput" placeholder="Enter text to analyze its emotional tone..."></textarea>
+            <button id="analyzeBtn" onclick="analyzeText()">Analyze Sentiment ✨</button>
+        </div>
+
+        <div id="results-container">
+            <div class="main-sentiment" id="sentimentText"></div>
+            
+            <div class="charts-grid">
+                <div class="chart-box">
+                    <canvas id="pieChart"></canvas>
+                </div>
+                <div class="chart-box">
+                    <canvas id="barChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let myPieChart = null;
+        let myBarChart = null;
+
+        async function analyzeText() {
+            const text = document.getElementById('textInput').value;
+            const btn = document.getElementById('analyzeBtn');
+            const resultsDiv = document.getElementById('results-container');
+            
+            if(!text.trim()) { alert("Please enter some text!"); return; }
+
+            btn.innerText = "Analyzing... ⏳";
+            btn.style.opacity = "0.7";
+
+            try {
+                // REPLACE THIS WITH YOUR RENDER URL
+                const backendUrl = 'http://127.0.0.1:8000/analyze'; 
+                
+                const response = await fetch(backendUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                });
+                
+                const data = await response.json();
+                
+                document.getElementById('sentimentText').innerHTML = `Overall Tone: <strong>${data.sentiment}</strong>`;
+                resultsDiv.style.display = 'block';
+                
+                renderCharts(data.scores);
+
+            } catch (error) {
+                alert("Error connecting to the backend. Is it running?");
+                console.error(error);
+            } finally {
+                btn.innerText = "Analyze Sentiment ✨";
+                btn.style.opacity = "1";
+            }
+        }
+
+        function renderCharts(scores) {
+            const pos = (scores.pos * 100).toFixed(1);
+            const neu = (scores.neu * 100).toFixed(1);
+            const neg = (scores.neg * 100).toFixed(1);
+
+            Chart.defaults.color = '#94a3b8';
+
+            if (myPieChart) myPieChart.destroy();
+            if (myBarChart) myBarChart.destroy();
+
+            const ctxPie = document.getElementById('pieChart').getContext('2d');
+            myPieChart = new Chart(ctxPie, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Positive', 'Neutral', 'Negative'],
+                    datasets: [{
+                        data: [pos, neu, neg],
+                        backgroundColor: ['#22c55e', '#94a3b8', '#ef4444'],
+                        borderWidth: 0,
+                        hoverOffset: 10
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        title: { display: true, text: 'Emotion Distribution (%)', color: '#fff' }
+                    },
+                    animation: { animateScale: true, animateRotate: true }
+                }
+            });
+
+            const ctxBar = document.getElementById('barChart').getContext('2d');
+            myBarChart = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: ['Positive', 'Neutral', 'Negative'],
+                    datasets: [{
+                        label: 'Intensity Score',
+                        data: [pos, neu, neg],
+                        backgroundColor: ['#22c55e', '#94a3b8', '#ef4444'],
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true, max: 100, grid: { color: 'rgba(255,255,255,0.1)' } },
+                        x: { grid: { display: false } }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        title: { display: true, text: 'Detailed Score Analysis', color: '#fff' }
+                    },
+                    animation: {
+                        duration: 1500,
+                        easing: 'easeOutQuart'
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

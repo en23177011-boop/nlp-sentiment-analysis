@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Global Sentiment Analytics</title>
+    <!-- Chart.js and WordCloud plugins -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/chartjs-chart-wordcloud@4.3.2/build/index.umd.min.js"></script>
     <style>
@@ -14,13 +15,24 @@
         .nav-link { display: inline-block; margin-bottom: 20px; color: #94a3b8; text-decoration: none; font-weight: 500; }
         .stat-card { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 20px; text-align: center; border: 1px solid rgba(255,255,255,0.08); margin-bottom: 25px; }
         .stat-number { font-size: 2.5em; font-weight: bold; color: #6366f1; margin: 5px 0 0 0; }
+        
         .grid-layout { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
         @media (max-width: 800px) { .grid-layout { grid-template-columns: 1fr; } }
-        .chart-box { background: rgba(0,0,0,0.2); padding: 20px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.05); }
+        
+        .chart-box { background: rgba(0,0,0,0.2); padding: 20px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; }
+        
+        /* This container forces the canvas to stay exactly this height and width */
+        .canvas-container { flex-grow: 1; position: relative; width: 100%; height: 250px; }
+        
         .topic-item { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; margin-bottom: 10px; font-size: 0.9em; }
         .bar-container { width: 100%; background: #334155; height: 8px; border-radius: 4px; margin-top: 8px; display: flex; overflow: hidden; }
         .bar-pos { background: #22c55e; height: 100%; }
         .bar-neg { background: #ef4444; height: 100%; }
+        
+        /* Makes the correlation list scrollable if it gets too long */
+        #correlationsList { overflow-y: auto; max-height: 250px; margin-top: 15px; padding-right: 5px; }
+        #correlationsList::-webkit-scrollbar { width: 6px; }
+        #correlationsList::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
     </style>
 </head>
 <body>
@@ -36,17 +48,21 @@
         <div class="grid-layout">
             <div class="chart-box">
                 <h3 style="text-align: center; color: #fff; font-size: 1em; margin-top: 0;">Sentiment Share</h3>
-                <canvas id="globalChart"></canvas>
+                <div class="canvas-container">
+                    <canvas id="globalChart"></canvas>
+                </div>
             </div>
             
             <div class="chart-box">
                 <h3 style="text-align: center; color: #fff; font-size: 1em; margin-top: 0;">Topic Word Cloud</h3>
-                <canvas id="wordCloudChart"></canvas>
+                <div class="canvas-container">
+                    <canvas id="wordCloudChart"></canvas>
+                </div>
             </div>
 
             <div class="chart-box">
                 <h3 style="text-align: center; color: #fff; font-size: 1em; margin-top: 0;">Topic-Sentiment Correlation</h3>
-                <div id="correlationsList" style="margin-top: 15px;"></div>
+                <div id="correlationsList"></div>
             </div>
         </div>
     </div>
@@ -54,6 +70,7 @@
     <script>
         async function loadGlobalStats() {
             try {
+                // Ensure this points to your specific Render backend URL
                 const response = await fetch('https://nlp-backend-xsoy.onrender.com/analytics');
                 const data = await response.json();
 
@@ -67,13 +84,15 @@
                         labels: ['Positive', 'Neutral', 'Negative'],
                         datasets: [{ data: [breakdown.Positive || 0, breakdown.Neutral || 0, breakdown.Negative || 0], backgroundColor: ['#22c55e', '#94a3b8', '#ef4444'], borderWidth: 0 }]
                     },
-                    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8' } } } }
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8' } } } }
                 });
 
-                // 2. Word Cloud
+                // 2. Word Cloud (Fixed formatting and size limits)
                 if (data.WordCloud && data.WordCloud.length > 0) {
-                    const words = data.WordCloud.map(w => w.text);
-                    const sizes = data.WordCloud.map(w => 15 + (w.value * 5)); // Scale word size
+                    // Strip stop-words from start of phrases
+                    const words = data.WordCloud.map(w => w.text.replace(/^(the|a|an)\s+/i, ''));
+                    // Shrink font scaling so words fit better
+                    const sizes = data.WordCloud.map(w => 12 + (w.value * 4)); 
                     
                     new Chart(document.getElementById('wordCloudChart').getContext('2d'), {
                         type: 'wordCloud',
@@ -85,21 +104,26 @@
                                 color: '#a855f7'
                             }]
                         },
-                        options: { plugins: { legend: { display: false } } }
+                        options: { 
+                            responsive: true, 
+                            maintainAspectRatio: false, // Fits canvas into the parent div
+                            plugins: { legend: { display: false } } 
+                        }
                     });
                 }
 
-                // 3. Topic-Sentiment Correlation
+                // 3. Topic-Sentiment Correlation (Cleaned text)
                 const corrList = document.getElementById('correlationsList');
                 if (data.Correlations && data.Correlations.length > 0) {
                     data.Correlations.forEach(item => {
                         const posPct = ((item.pos / item.total) * 100).toFixed(0);
                         const negPct = ((item.neg / item.total) * 100).toFixed(0);
+                        const cleanTopic = item.topic.replace(/^(the|a|an)\s+/i, ''); // Strip stop-words here too
                         
                         corrList.innerHTML += `
                             <div class="topic-item">
                                 <div style="display: flex; justify-content: space-between; color: #e2e8f0; font-weight: bold;">
-                                    <span>${item.topic}</span>
+                                    <span>${cleanTopic}</span>
                                     <span style="font-size: 0.8em; font-weight: normal;">${item.total} mentions</span>
                                 </div>
                                 <div style="font-size: 0.75em; color: #94a3b8; margin-top: 5px;">${posPct}% Pos | ${negPct}% Neg</div>
@@ -111,11 +135,11 @@
                         `;
                     });
                 } else {
-                    corrList.innerHTML = '<div style="text-align: center; color: #94a3b8;">No data yet.</div>';
+                    corrList.innerHTML = '<div style="text-align: center; color: #94a3b8; margin-top: 20px;">No data yet.</div>';
                 }
 
             } catch (err) {
-                console.error("Error:", err);
+                console.error("Error fetching analytics:", err);
             }
         }
         window.onload = loadGlobalStats;

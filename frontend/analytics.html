@@ -5,28 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Global Sentiment Analytics</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/chartjs-chart-wordcloud@4.3.2/build/index.umd.min.js"></script>
     <style>
         :root { --bg: #0f172a; --card-bg: #1e293b; --text: #f8fafc; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); color: var(--text); margin: 0; padding: 20px; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
-        .dashboard { background: var(--card-bg); width: 100%; max-width: 800px; padding: 40px; border-radius: 20px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); border: 1px solid rgba(255,255,255,0.1); }
+        body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); color: var(--text); margin: 0; padding: 20px; min-height: 100vh; display: flex; justify-content: center; align-items: center; }
+        .dashboard { background: var(--card-bg); width: 100%; max-width: 1000px; padding: 40px; border-radius: 20px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); }
         h2 { text-align: center; margin-top: 0; font-size: 2em; background: -webkit-linear-gradient(#a855f7, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .nav-link { display: inline-block; margin-bottom: 20px; color: #94a3b8; text-decoration: none; font-weight: 500; transition: 0.2s; }
-        .nav-link:hover { color: #f8fafc; }
-        .stat-card { background: rgba(255, 255, 255, 0.04); border-radius: 12px; padding: 20px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.08); margin-bottom: 25px; }
+        .nav-link { display: inline-block; margin-bottom: 20px; color: #94a3b8; text-decoration: none; font-weight: 500; }
+        .stat-card { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 20px; text-align: center; border: 1px solid rgba(255,255,255,0.08); margin-bottom: 25px; }
         .stat-number { font-size: 2.5em; font-weight: bold; color: #6366f1; margin: 5px 0 0 0; }
-        
-        .grid-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        @media (max-width: 600px) { .grid-layout { grid-template-columns: 1fr; } }
-        
-        .chart-box { background: rgba(0, 0, 0, 0.2); padding: 20px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.05); }
-        
-        .topics-list { list-style: none; padding: 0; margin: 0; }
-        .topic-item { background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.3); padding: 10px 15px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; color: #c7d2fe; }
-        .topic-count { background: #6366f1; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8em; font-weight: bold; }
+        .grid-layout { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+        @media (max-width: 800px) { .grid-layout { grid-template-columns: 1fr; } }
+        .chart-box { background: rgba(0,0,0,0.2); padding: 20px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.05); }
+        .topic-item { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; margin-bottom: 10px; font-size: 0.9em; }
+        .bar-container { width: 100%; background: #334155; height: 8px; border-radius: 4px; margin-top: 8px; display: flex; overflow: hidden; }
+        .bar-pos { background: #22c55e; height: 100%; }
+        .bar-neg { background: #ef4444; height: 100%; }
     </style>
 </head>
 <body>
-
     <div class="dashboard">
         <a href="index.html" class="nav-link">← Back to Sentiment Analyzer</a>
         <h2>Global Analytics Dashboard</h2>
@@ -43,11 +40,13 @@
             </div>
             
             <div class="chart-box">
-                <h3 style="text-align: center; color: #fff; font-size: 1em; margin-top: 0;">Top Extracted Topics</h3>
-                <ul class="topics-list" id="topicsList">
-                    <!-- Topics will load here -->
-                    <li style="text-align: center; color: #94a3b8; font-size: 0.9em; margin-top: 20px;">Analyzing incoming data...</li>
-                </ul>
+                <h3 style="text-align: center; color: #fff; font-size: 1em; margin-top: 0;">Topic Word Cloud</h3>
+                <canvas id="wordCloudChart"></canvas>
+            </div>
+
+            <div class="chart-box">
+                <h3 style="text-align: center; color: #fff; font-size: 1em; margin-top: 0;">Topic-Sentiment Correlation</h3>
+                <div id="correlationsList" style="margin-top: 15px;"></div>
             </div>
         </div>
     </div>
@@ -55,50 +54,70 @@
     <script>
         async function loadGlobalStats() {
             try {
-                // Change to your Render URL if it differs
                 const response = await fetch('https://nlp-backend-xsoy.onrender.com/analytics');
                 const data = await response.json();
 
-                // 1. Update Total
                 document.getElementById('totalRequests').innerText = data["Total Requests"] || 0;
 
-                // 2. Render Chart
+                // 1. Pie Chart
                 const breakdown = data.Breakdown || {};
-                const ctx = document.getElementById('globalChart').getContext('2d');
-                new Chart(ctx, {
+                new Chart(document.getElementById('globalChart').getContext('2d'), {
                     type: 'pie',
                     data: {
                         labels: ['Positive', 'Neutral', 'Negative'],
-                        datasets: [{
-                            data: [breakdown.Positive || 0, breakdown.Neutral || 0, breakdown.Negative || 0],
-                            backgroundColor: ['#22c55e', '#94a3b8', '#ef4444'],
-                            borderWidth: 0
-                        }]
+                        datasets: [{ data: [breakdown.Positive || 0, breakdown.Neutral || 0, breakdown.Negative || 0], backgroundColor: ['#22c55e', '#94a3b8', '#ef4444'], borderWidth: 0 }]
                     },
                     options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8' } } } }
                 });
 
-                // 3. Render Top Topics
-                const topicsList = document.getElementById('topicsList');
-                topicsList.innerHTML = ''; // clear loading text
-                
-                if (data["Top Topics"] && data["Top Topics"].length > 0) {
-                    data["Top Topics"].forEach(item => {
-                        const li = document.createElement('li');
-                        li.className = 'topic-item';
-                        li.innerHTML = `<span>${item.topic}</span> <span class="topic-count">${item.count}</span>`;
-                        topicsList.appendChild(li);
+                // 2. Word Cloud
+                if (data.WordCloud && data.WordCloud.length > 0) {
+                    const words = data.WordCloud.map(w => w.text);
+                    const sizes = data.WordCloud.map(w => 15 + (w.value * 5)); // Scale word size
+                    
+                    new Chart(document.getElementById('wordCloudChart').getContext('2d'), {
+                        type: 'wordCloud',
+                        data: {
+                            labels: words,
+                            datasets: [{
+                                label: 'Mentions',
+                                data: sizes,
+                                color: '#a855f7'
+                            }]
+                        },
+                        options: { plugins: { legend: { display: false } } }
+                    });
+                }
+
+                // 3. Topic-Sentiment Correlation
+                const corrList = document.getElementById('correlationsList');
+                if (data.Correlations && data.Correlations.length > 0) {
+                    data.Correlations.forEach(item => {
+                        const posPct = ((item.pos / item.total) * 100).toFixed(0);
+                        const negPct = ((item.neg / item.total) * 100).toFixed(0);
+                        
+                        corrList.innerHTML += `
+                            <div class="topic-item">
+                                <div style="display: flex; justify-content: space-between; color: #e2e8f0; font-weight: bold;">
+                                    <span>${item.topic}</span>
+                                    <span style="font-size: 0.8em; font-weight: normal;">${item.total} mentions</span>
+                                </div>
+                                <div style="font-size: 0.75em; color: #94a3b8; margin-top: 5px;">${posPct}% Pos | ${negPct}% Neg</div>
+                                <div class="bar-container">
+                                    <div class="bar-pos" style="width: ${posPct}%"></div>
+                                    <div class="bar-neg" style="width: ${negPct}%"></div>
+                                </div>
+                            </div>
+                        `;
                     });
                 } else {
-                    topicsList.innerHTML = '<li style="text-align: center; color: #94a3b8;">No topics extracted yet.</li>';
+                    corrList.innerHTML = '<div style="text-align: center; color: #94a3b8;">No data yet.</div>';
                 }
 
             } catch (err) {
-                console.error("Error fetching analytics:", err);
-                document.getElementById('totalRequests').innerText = "Offline";
+                console.error("Error:", err);
             }
         }
-
         window.onload = loadGlobalStats;
     </script>
 </body>

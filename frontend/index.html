@@ -34,6 +34,7 @@
             border-radius: 20px;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             border: 1px solid rgba(255,255,255,0.1);
+            position: relative;
         }
 
         h2 { text-align: center; margin-top: 0; font-size: 2em; background: -webkit-linear-gradient(#a855f7, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
@@ -77,6 +78,9 @@
 <body>
 
     <div class="dashboard">
+        <!-- New Navigation Link -->
+        <a href="analytics.html" style="color: #94a3b8; text-decoration: none; font-size: 0.9em; display: inline-block; margin-bottom: 15px; transition: color 0.2s;" onmouseover="this.style.color='#f8fafc'" onmouseout="this.style.color='#94a3b8'">📊 View Global Analytics →</a>
+        
         <h2>AI Sentiment Analytics</h2>
         
         <div class="input-group">
@@ -84,6 +88,7 @@
             <button id="analyzeBtn" onclick="analyzeText()">Analyze Sentiment ✨</button>
         </div>
 
+        <!-- Dynamic Results Area -->
         <div id="results-container">
             <div class="main-sentiment" id="sentimentText"></div>
             
@@ -96,11 +101,24 @@
                 </div>
             </div>
         </div>
+
+        <!-- History Section -->
+        <div id="history-container" style="margin-top: 40px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); display: none;">
+            <h3 style="text-align: left; margin-bottom: 15px; color: #94a3b8;">Recent Analyses</h3>
+            <ul id="historyList" style="list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto;">
+                <!-- History items will appear here -->
+            </ul>
+            <button onclick="clearHistory()" style="margin-top: 15px; background: transparent; border: 1px solid #ef4444; color: #ef4444; padding: 8px 15px; font-size: 14px; cursor: pointer; transition: 0.3s;">Clear History</button>
+        </div>
     </div>
 
     <script>
+        // Store chart instances
         let myPieChart = null;
         let myBarChart = null;
+
+        // Load history when page opens
+        window.onload = loadHistory;
 
         async function analyzeText() {
             const text = document.getElementById('textInput').value;
@@ -109,12 +127,13 @@
             
             if(!text.trim()) { alert("Please enter some text!"); return; }
 
+            // Loading state
             btn.innerText = "Analyzing... ⏳";
             btn.style.opacity = "0.7";
 
             try {
-                // REPLACE THIS WITH YOUR RENDER URL
-               const backendUrl = 'https://nlp-backend-xsoy.onrender.com/analyze'; 
+                // Your live Render URL
+                const backendUrl = 'https://nlp-backend-xsoy.onrender.com/analyze'; 
                 
                 const response = await fetch(backendUrl, {
                     method: 'POST',
@@ -124,10 +143,15 @@
                 
                 const data = await response.json();
                 
+                // Update UI
                 document.getElementById('sentimentText').innerHTML = `Overall Tone: <strong>${data.sentiment}</strong>`;
                 resultsDiv.style.display = 'block';
                 
+                // Draw charts
                 renderCharts(data.scores);
+                
+                // Save to History
+                saveToHistory(text, data.sentiment);
 
             } catch (error) {
                 alert("Error connecting to the backend. Is it running?");
@@ -162,10 +186,7 @@
                 },
                 options: {
                     responsive: true,
-                    plugins: {
-                        legend: { position: 'bottom' },
-                        title: { display: true, text: 'Emotion Distribution (%)', color: '#fff' }
-                    },
+                    plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Emotion Distribution (%)', color: '#fff' } },
                     animation: { animateScale: true, animateRotate: true }
                 }
             });
@@ -184,20 +205,46 @@
                 },
                 options: {
                     responsive: true,
-                    scales: {
-                        y: { beginAtZero: true, max: 100, grid: { color: 'rgba(255,255,255,0.1)' } },
-                        x: { grid: { display: false } }
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        title: { display: true, text: 'Detailed Score Analysis', color: '#fff' }
-                    },
-                    animation: {
-                        duration: 1500,
-                        easing: 'easeOutQuart'
-                    }
+                    scales: { y: { beginAtZero: true, max: 100, grid: { color: 'rgba(255,255,255,0.1)' } }, x: { grid: { display: false } } },
+                    plugins: { legend: { display: false }, title: { display: true, text: 'Detailed Score Analysis', color: '#fff' } },
+                    animation: { duration: 1500, easing: 'easeOutQuart' }
                 }
             });
+        }
+
+        function saveToHistory(text, sentiment) {
+            let history = JSON.parse(localStorage.getItem('nlpHistory')) || [];
+            history.unshift({ text: text, sentiment: sentiment, date: new Date().toLocaleTimeString() });
+            if(history.length > 5) history.pop(); 
+            localStorage.setItem('nlpHistory', JSON.stringify(history));
+            loadHistory();
+        }
+
+        function loadHistory() {
+            let history = JSON.parse(localStorage.getItem('nlpHistory')) || [];
+            const historyContainer = document.getElementById('history-container');
+            const historyList = document.getElementById('historyList');
+            
+            if(history.length === 0) {
+                historyContainer.style.display = 'none';
+                return;
+            }
+
+            historyContainer.style.display = 'block';
+            historyList.innerHTML = ''; 
+
+            history.forEach(item => {
+                const li = document.createElement('li');
+                li.style.cssText = "background: rgba(255,255,255,0.05); margin-bottom: 10px; padding: 12px; border-radius: 8px; font-size: 0.9em; display: flex; justify-content: space-between; align-items: center;";
+                const shortText = item.text.length > 40 ? item.text.substring(0, 40) + "..." : item.text;
+                li.innerHTML = `<span><span style="color: #6366f1; font-size: 0.8em; margin-right: 10px;">${item.date}</span> "${shortText}"</span> <strong>${item.sentiment}</strong>`;
+                historyList.appendChild(li);
+            });
+        }
+
+        function clearHistory() {
+            localStorage.removeItem('nlpHistory');
+            loadHistory();
         }
     </script>
 </body>

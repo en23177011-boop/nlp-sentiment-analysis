@@ -5,14 +5,18 @@ from nltk.sentiment import SentimentIntensityAnalyzer
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from better_profanity import profanity
 import nltk
 import re
 import sqlite3
 import spacy
 
-# Download NLP data quietly
+# Download NLP data
 nltk.download('vader_lexicon', quiet=True)
 nlp = spacy.load("en_core_web_sm")
+
+# Initialize profanity filter
+profanity.load_censor_words()
 
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
@@ -50,14 +54,18 @@ class TextRequest(BaseModel):
 @app.post("/analyze")
 @limiter.limit("5/minute")
 def analyze_sentiment(request: Request, text_req: TextRequest):
+    # 1. Profanity Check
+    has_bad_words = profanity.contains_profanity(text_req.text)
+
+    # 2. Sentiment Analysis
     scores = sia.polarity_scores(text_req.text)
     compound = scores['compound']
     sentiment = "Positive" if compound >= 0.05 else "Negative" if compound <= -0.05 else "Neutral"
         
+    # 3. Context & Linguistic Extraction
     doc = nlp(text_req.text)
     extracted_keywords = [chunk.text.lower().strip() for chunk in doc.noun_chunks if chunk.root.pos_ != "PRON" and len(chunk.text) > 2]
     
-    # Lexical and Morphological Analysis
     linguistics = []
     for token in doc:
         if not token.is_punct and not token.is_space:
@@ -68,6 +76,7 @@ def analyze_sentiment(request: Request, text_req: TextRequest):
                 "morph": str(token.morph)
             })
         
+    # 4. Database Logging
     conn = sqlite3.connect("analytics.db")
     cursor = conn.cursor()
     cursor.execute("INSERT INTO queries (sentiment, compound_score) VALUES (?, ?)", (sentiment, compound))
@@ -77,10 +86,11 @@ def analyze_sentiment(request: Request, text_req: TextRequest):
     conn.close()
         
     return {
-        "sentiment": f"{sentiment} {'😃' if sentiment=='Positive' else '😞' if sentiment=='Negative' else '😐'}", 
+        "sentiment": sentiment, # Emojis removed for professional output
         "scores": scores, 
         "extracted_topics": extracted_keywords,
-        "linguistics": linguistics
+        "linguistics": linguistics,
+        "has_profanity": has_bad_words # New flag added
     }
 
 @app.get("/analytics")
